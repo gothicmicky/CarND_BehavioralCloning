@@ -13,10 +13,11 @@ from keras.optimizers import Adam
 from keras.callbacks import ModelCheckpoint
 from keras.layers import Convolution2D, MaxPooling2D, ZeroPadding2D
 from keras.layers import Activation, Dropout, Flatten, Dense
+from keras.layers import Lambda
 from keras.utils import np_utils
 
 _index_in_epoch = 0
-nb_epoch = 10
+nb_epoch = 5
 batch_size = 128
 
 img_height, img_width = 64, 64
@@ -30,7 +31,7 @@ def shuffle(x, y):
     return (x, y)
 
 def train_test_split(X, Y):
-    count = int(len(X)*.7)
+    count = int(len(X)*.8)
 
     X_train = X[:count]
     Y_train = Y[:count]
@@ -127,29 +128,35 @@ def transform_generator(x, y, batch_size=32, is_validation=False):
             else: bad.append('/home/sameh/short-p/data/{}'.format(_images[i]))
 
             img = resize_image(img)
-
             img = img.reshape(img_height, img_width, 3)
             images.append(img)
             labels.append(_labels[i])
-
+            
             if is_validation: continue
+            #img, angle = affine_transform(img, labels[i], pixels, pixels*adjust*2, right=True)
+            #images.append(img)
+            #labels.append(angle)
 
-            img, angle = affine_transform(img, labels[i], pixels, pixels*adjust*2, right=True)
-            images.append(img)
-            labels.append(angle)
+        # Data Augmentation: Flipping Images And Steering Measurements
+        # To help with the left turn bias involves flipping images and 
+        # taking the opposite sign of the steering measurement
+        augmented_images, augmented_labels = [],[]
+        for image,label in zip(images,labels):
+            augmented_images.append(image)
+            augmented_labels.append(label)
+            augmented_images.append(cv2.flip(image,1))
+            augmented_labels.append(label*-1.0)
 
-        X = np.array(images, dtype=np.float64).reshape((-1, img_height, img_width, 3))
-
-        X /= 255.
-
-        Y = np.array(labels, dtype=np.float64)
+        X = np.array(augmented_images, dtype=np.float64).reshape((-1, img_height, img_width, 3))
+        Y = np.array(augmented_labels, dtype=np.float64)
 
         # raise RuntimeError(bad)
-
         yield (X, Y)
 
 def gen_model():
     model = Sequential()
+    #data preprocessing: normalization
+    model.add(Lambda(lambda x: (x / 255.0) - 0.5, input_shape=(64,64,3)))
 
     # (((64 - 5) + 4) / 1.) + 1
     model.add(Convolution2D(16, 5, 5, subsample=(1, 1), input_shape=(img_height, img_width, 3)))
