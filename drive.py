@@ -22,9 +22,24 @@ app = Flask(__name__)
 model = None
 prev_image_array = None
 
+def preprocessImage(image):
+    # Proportionally get lower half portion of the image
+    nrow, ncol, nchannel = image.shape
+    
+    start_row = int(nrow * 0.35)
+    end_row = int(nrow * 0.875)   
+    
+    ## This removes most of the sky and small amount below including the hood
+    image_no_sky = image[start_row:end_row, :]
+
+    # This resizes to 66 x 220 for NVIDIA's model
+    new_image = cv2.resize(image_no_sky, (220,66), interpolation=cv2.INTER_AREA)
+
+    return new_image
+
 # Images need to be resized in the training script, otherwise car does not move
 def resize_image(img):
-   return cv2.resize(img,( 64, 64))  
+   return cv2.resize(img,( 200, 66))  
 
 class SimplePIController:
     def __init__(self, Kp, Ki):
@@ -64,20 +79,96 @@ def telemetry(sid, data):
         # The current image from the center camera of the car
         imgString = data["image"]
         image = Image.open(BytesIO(base64.b64decode(imgString)))
+
+        # Annie
+        #image = image.convert('RGB')
+
         image_array = np.asarray(image)
-        #image_array = resize_image(image_array)
+        
+        # Annie's pre-processing
+        # image_preprocess = preprocessImage(image_array)
+        # image_array = image_preprocess[None, :, :, :]
+
+        #########################################################################
+        #perform pre-rocessing on image
+        #crop image to a new size
+        image_array = image_array[20:140,0:320]
+        image_array = cv2.resize(image_array, (200,66))
+
+        #########################################################################
         steering_angle = float(model.predict(image_array[None, :, :, :], batch_size=1))
 
         throttle = controller.update(float(speed))
 
+        # Adaptive throttle - Both Track
+        # if (abs(float(speed)) < 10):
+        #     throttle = 0.5
+        # else:
+        #     # When speed is below 20 then increase throttle by speed_factor
+        #     if (abs(float(speed)) < 25):
+        #         speed_factor = 1.35
+        #     else:
+        #         speed_factor = 1.0
+
+        #     if (abs(steering_angle) < 0.1): 
+        #         throttle = 0.3 * speed_factor
+        #     elif (abs(steering_angle) < 0.5):
+        #         throttle = 0.2 * speed_factor
+        #     else:
+        #         throttle = 0.15 * speed_factor
+
+        # Speed limits control
+        # min_speed = 15 
+        # max_speed = 25 
+        # if float(speed) < min_speed:
+        #     throttle = 5.0
+        # elif float(speed) > max_speed:
+        #     throttle = -1.0
+        # else:
+        #     throttle = 5.0
+
         print(steering_angle, throttle)
         send_control(steering_angle, throttle)
 
+        # # save frame original
+        # if args.image_folder != '':
+        #     timestamp = datetime.utcnow().strftime('%Y_%m_%d_%H_%M_%S_%f')[:-3]
+        #     image_filename = os.path.join(args.image_folder, timestamp)
+        #     image.save('{}.jpg'.format(image_filename))
+
         # save frame
         if args.image_folder != '':
+            # Recorded image with right color as using OpenCV (BGR).
+            img_record = cv2.cvtColor(image_array, cv2.COLOR_RGB2BGR)
+            #print("saving...")
+
             timestamp = datetime.utcnow().strftime('%Y_%m_%d_%H_%M_%S_%f')[:-3]
             image_filename = os.path.join(args.image_folder, timestamp)
-            image.save('{}.jpg'.format(image_filename))
+
+            # Save original image?
+            #image.save('{}.png'.format(image_filename))
+
+            # Draw a line on image to show steering direction
+            if args.draw_steer == 'on':
+                start_x = 100
+                start_y = 66
+                mid_x = 100
+                mid_y = 60
+                end_y = 30
+                end_x = start_x + steering_angle * (start_y - end_y)
+                end_x = int(end_x)
+
+                points_list = []
+                points_list.append((start_x, start_y))
+                points_list.append((mid_x, mid_y))
+                points_list.append((end_x, end_y))
+                cv2.polylines(img_record, [np.array(points_list)], False, (255,0,0), thickness=1, lineType=cv2.LINE_AA)
+
+            # Add steering angle to file name.
+            image_filename = image_filename + '_' + str(steering_angle)
+            # Save angle-annotated image?
+            cv2.imwrite('{}.png'.format(image_filename), img_record)
+
     else:
         # NOTE: DON'T EDIT THIS.
         sio.emit('manual', data={}, skip_sid=True)
@@ -113,6 +204,14 @@ if __name__ == '__main__':
         default='',
         help='Path to image folder. This is where the images from the run will be saved.'
     )
+    parser.add_argument(
+    'draw_steer',
+    type=str,
+    nargs='?',
+    default='on',
+    help='Want to draw the steering angle on image? On/off. Default on.'
+    )
+
     args = parser.parse_args()
 
     # check that model Keras version is same as local Keras version
