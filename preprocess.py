@@ -1,30 +1,75 @@
-import os
-import pickle
-import json
-import random
 import csv
-
-import cv2
 import numpy as np
+import cv2
+import tables
+import os
+import sys
+import random
 
-####################################################################
 
-def crop_image(image, y1, y2, x1, x2):
+def normalize_grayscale(image_data):
     """
-    crop image into respective size
-    give: the crop extent
+    Normalize the image data with Min-Max scaling to a range of [0.1, 0.9]
+    :param image_data: The image data to be normalized
+    :return: Normalized image data
     """
-    return image[y1:y2, x1:x2]
+    img_max = np.max(image_data)
+    img_min = np.min(image_data)
+    a = -0.5
+    b = 0.5
 
-####################################################################
+    img_normed = a + (b-a)*(image_data - img_min)/(img_max - img_min)
+    #print(np.max(img_normed))
+    #print(np.min(img_normed))
+    return img_normed
 
-def flip_image(image, angle):
-    img_flip = cv2.flip(image,1)
-    angle = -angle
-        
-    return img_flip, angle
+def normalize_color(image_data):
+    """
+    Normalize the image data on per channel basis. 
+    """
+    img_normed_color = np.zeros_like(image_data, dtype=float)
+    for ch in range(image_data.shape[3]):
+        tmp = normalize_grayscale(image_data[:,:,:,ch])
+        img_normed_color[:,:,:,ch] = tmp
+    #print(np.max(img_normed_color))
+    #print(np.min(img_normed_color))
+    return img_normed_color
 
-####################################################################
+def lower_luma(image):
+    RATIO = 0.5
+    cv2.imwrite("ori.png", image)
+    image1 = cv2.cvtColor(image,cv2.COLOR_RGB2YUV)
+    image1[:,:,0] = RATIO*image1[:,:,0]
+    image1 = cv2.cvtColor(image1,cv2.COLOR_YUV2RGB)
+    cv2.imwrite("after.png", image1)
+    return image1
+
+def augment_brightness(image):
+    #cv2.imwrite("ori.png", image)
+    image1 = cv2.cvtColor(image,cv2.COLOR_RGB2HSV)
+    random_bright = .25+np.random.uniform()
+    #print(random_bright)
+    image1[:,:,2] = image1[:,:,2]*random_bright
+    image1 = cv2.cvtColor(image1,cv2.COLOR_HSV2RGB)
+    #cv2.imwrite("after.png", image1)
+    return image1
+
+def darker_img(image):
+    # Convert to YUV
+    img_yuv = cv2.cvtColor(image, cv2.COLOR_BGR2YUV)
+    img_gray = img_yuv[:,:,0]
+   
+    # Pick the majority pixels of the image
+    idx = (img_gray<245) & (img_gray > 10)
+    
+    # Make the image darker
+    img_gray_scale = img_gray[idx]*np.random.uniform(0.1,0.6)
+    img_gray[idx] = img_gray_scale
+    
+    # Convert back to BGR 
+    img_yuv[:,:,0] = img_gray
+    img = cv2.cvtColor(img_yuv, cv2.COLOR_YUV2BGR)
+    return img
 
 def warp_img(img, angle):
     '''
@@ -47,25 +92,9 @@ def warp_img(img, angle):
     
     M = cv2.getAffineTransform(pts1,pts2)
     warp_img = cv2.warpAffine(img,M,(cols,rows))
-    
+    #cv2.imwrite('test.png', img)
+    #cv2.imwrite('test_warp.png', warp_img)
     return warp_img, total_angle
-
-####################################################################
-
-def augment_brightness(image):
-    """
-    apply random brightness on the image
-    """
-    scale_factor = .25
-    image = cv2.cvtColor(image,cv2.COLOR_RGB2HSV)
-    random_bright = scale_factor+np.random.uniform()
-    
-    # scaling up or down the V channel of HSV
-    image[:,:,2] = image[:,:,2]*random_bright
-
-    return cv2.cvtColor(image, cv2.COLOR_HSV2RGB)
-
-####################################################################
 
 # Below func. copied from: https://chatbotslife.com/using-augmentation-to-mimic-human-driving-496b569760a9#.kgjn97cup
 def add_random_shadow(image):
@@ -91,95 +120,203 @@ def add_random_shadow(image):
     image = cv2.cvtColor(image_hls,cv2.COLOR_HLS2RGB)
     return image
 
-####################################################################
+# -------------------------------------
+# Command line argument processing
+# -------------------------------------
+if len(sys.argv) < 2:
+    print("Missing training data file.")
+    print("python3 model.py <data.h5> [flip]")
 
-def change_brightness(image):
-    # Randomly select a percent change
-    change_pct = random.uniform(0.4, 1.2)
-    
-    # Change to HSV to change the brightness V
-    hsv = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
-    hsv[:,:,2] = hsv[:,:,2] * change_pct
-    
-    #Convert back to RGB 
-    img_bright = cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
-    return img_bright
+DATA_DIR = str(sys.argv[1])
 
-####################################################################
+FLIP_ON = False
+if len(sys.argv)==3:
+    FLIP_ON = True
 
-def trans_image(image,steer,trans_range, trans_y=False):
-    """
-    translate image and compensate for the translation on the steering angle
-    """
-    rows, cols, chan = image.shape
-    
-    # horizontal translation with 0.008 steering compensation per pixel
-    tr_x = trans_range*np.random.uniform()-trans_range/2
-    steer_ang = steer + tr_x/trans_range*.4
-    
-    # option to disable vertical translation (vertical translation not necessary)
-    if trans_y:
-        tr_y = 40*np.random.uniform()-40/2
-    else:
-        tr_y = 0
-    
-    Trans_M = np.float32([[1,0,tr_x],[0,1,tr_y]])
-    image_tr = cv2.warpAffine(image,Trans_M,(cols,rows))
-    
-    return image_tr,steer_ang
+# ------------------
+# Read data from recorded dataset
+# ------------------
 
-def affine_transform(img, angle, pixels, angle_adjust, right=True):
+# List to store data read from recording
+X_train = []
+y_train = []
+throttle = []
+brake = []
+speed = []
 
-    cols, rows, ch = img.shape
-        
-    pts1 = np.float32([[10,10], [200,50], [50,250]])
+SMALL_SCALE = 0.9
+LARGE_SCALE = 1.1
 
-    if right:
-        pts2 = np.float32([[10, 10], [200+pixels, 50], [50, 250]])
-        angle =- angle_adjust
-    else:
-        pts2 = np.float32([[10, 10], [200-pixels, 50], [50, 250]])
-        angle =- angle_adjust
+with open(DATA_DIR+'/driving_log_combined.csv', newline='') as f:
+    reader = csv.reader(f)
+    for row in reader:
+        if row[0] != 'center':
+            # center
+            angle = np.float32(row[3])
+            # image input, crop and scale
+            img = cv2.imread(DATA_DIR+"/"+row[0])
+            img_crop = img[56:160,:,:]
+            img_resize = cv2.resize(img_crop, (200,66))
+            img_resize = add_random_shadow(img_resize)
+            img_resize,angle = warp_img(img_resize, angle)
+            # Opencv bgr to rgb
+            img_resize = img_resize[...,::-1]
+            X_train.append(img_resize)
+            y_train.append(angle)
+            # throttle, brake, speed
+            row_4 = np.float32(row[4])
+            row_5 = np.float32(row[5])
+            row_6 = np.float32(row[6])
+            throttle.append(row_4)
+            brake.append(row_5)
+            speed.append(row_6)
 
-    M = cv2.getAffineTransform(pts1, pts2)
+#            # Scale angle a bit for left/right images
+#            if angle > 0: # right turn
+#                l_angle = LARGE_SCALE * angle
+#                r_angle = SMALL_SCALE * angle
+#            else: # left turn
+#                l_angle = SMALL_SCALE * angle
+#                r_angle = LARGE_SCALE* angle
+#            #l_angle = angle + 0.25
+#            #r_angle = angle - 0.25
+#
+#            # left
+#            img = cv2.imread(DATA_DIR+"/"+row[1])
+#            img_crop = img[56:160,:,:]
+#            img_resize = cv2.resize(img_crop, (200,66))
+#            img_resize = add_random_shadow(img_resize)
+#            # Opencv bgr to rgb
+#            img_resize = img_resize[...,::-1]
+#            X_train.append(img_resize)
+#            y_train.append(l_angle)
+#            throttle.append(row_4)
+#            brake.append(row_5)
+#            speed.append(row_6)
+#
+#            # right
+#            img = cv2.imread(DATA_DIR+"/"+row[2])
+#            img_crop = img[56:160,:,:]
+#            img_resize = cv2.resize(img_crop, (200,66))
+#            img_resize = add_random_shadow(img_resize)
+#            # Opencv bgr to rgb
+#            img_resize = img_resize[...,::-1]
+#            X_train.append(img_resize)
+#            y_train.append(r_angle)
+#            throttle.append(row_4)
+#            brake.append(row_5)
+#            speed.append(row_6)
+    print("Original data read done.")
 
-    dst = cv2.warpAffine(img, M, (rows, cols))
+    # Horizontal flipping
+    if FLIP_ON:
+      # Roll back to beginning of file
+      f.seek(0)
+      for row in reader:
+        if row[0] != 'center':
+            img = cv2.imread(DATA_DIR+"/"+row[0])
+            img_crop = img[56:160,:,:]
+            img_resize = cv2.resize(img_crop, (200,66))
+            #img_resize = add_random_shadow(img_resize)
+            angle = np.float32(row[3])
+            # Horizontally flipped version of the image
+            img_resize_flip = cv2.flip(img_resize,0)
+            # Opencv bgr to rgb
+            img_resize_flip = img_resize_flip[...,::-1]
+            X_train.append(img_resize_flip)
+            y_train.append(-angle)
+            row_4 = np.float32(row[4])
+            row_5 = np.float32(row[5])
+            row_6 = np.float32(row[6])
+            throttle.append(row_4)
+            brake.append(row_5)
+            speed.append(row_6)
 
-    return dst.reshape((cols, rows, ch)), angle
+            if angle > 0: # right turn
+                l_angle = LARGE_SCALE * angle
+                r_angle = SMALL_SCALE * angle
+            else: # left turn
+                l_angle = SMALL_SCALE * angle
+                r_angle = LARGE_SCALE* angle
+
+            # left
+            img = cv2.imread(DATA_DIR+"/"+row[1])
+            img_crop = img[56:160,:,:]
+            img_resize = cv2.resize(img_crop, (200,66))
+            #img_resize = add_random_shadow(img_resize)
+            # Horizontally flipped version of the image
+            img_resize_flip = cv2.flip(img_resize,0)
+            # Opencv bgr to rgb
+            img_resize_flip = img_resize_flip[...,::-1]
+            X_train.append(img_resize_flip)
+            y_train.append(-l_angle)
+            throttle.append(row_4)
+            brake.append(row_5)
+            speed.append(row_6)
+
+            # right
+            img = cv2.imread(DATA_DIR+"/"+row[2])
+            img_crop = img[56:160,:,:]
+            img_resize = cv2.resize(img_crop, (200,66))
+            #img_resize = add_random_shadow(img_resize)
+            # Horizontally flipped version of the image
+            img_resize_flip = cv2.flip(img_resize,0)
+            # Opencv bgr to rgb
+            img_resize_flip = img_resize_flip[...,::-1]
+            X_train.append(img_resize_flip)
+            y_train.append(-r_angle)
+            throttle.append(row_4)
+            brake.append(row_5)
+            speed.append(row_6)
+      print("Horizontal flipping done.")
+
+# sanity check
+# Opencv: rgb back to bgr
+img_resize = X_train[23]
+img_resize = img_resize[...,[2,1,0]]
+cv2.imwrite("preprocessing_sanity_chk.png", img_resize)
+
+# Convert to numpy array
+X_train = normalize_color(np.array(X_train))
+y_train = np.array(y_train)
+throttle = np.array(throttle)
+brake = np.array(brake)
+speed = np.array(speed)
+
+#print("max X_train = ", np.max(X_train))
+#print("min X_train = ", np.min(X_train))
+#print("y_train = ", y_train)
+print("Total samples: ", len(y_train))
+
+# -------------------
+# Save to HDF5 file
+# -------------------
+h5_file = DATA_DIR+".h5"
+if not os.path.isfile(h5_file):
+    print('Saving preprocessed data to HDF5 file...', h5_file)
+    try:
+        with tables.open_file(h5_file, 'w') as f:
+            filters = tables.Filters(complevel=5, complib='blosc')
+
+            f_img = f.create_earray(f.root, 'img', tables.Atom.from_dtype(X_train[0].dtype), shape=(0,X_train.shape[1],X_train.shape[2],X_train.shape[3]), filters=filters, expectedrows=X_train.shape[0])
+            #f_img = f.create_earray(f.root, 'img', tables.Atom.from_dtype(X_train[0].dtype), shape=(0,66,200,3), filters=filters, expectedrows=len(X_train))
+            f_steer = f.create_earray(f.root, 'steer', tables.Atom.from_dtype(np.dtype('float')), shape=(0,), filters=filters)
+            f_throttle = f.create_earray(f.root, 'throttle', tables.Atom.from_dtype(np.dtype('float')), shape=(0,), filters=filters)
+            f_brake = f.create_earray(f.root, 'brake', tables.Atom.from_dtype(np.dtype('float')), shape=(0,), filters=filters)
+            f_speed = f.create_earray(f.root, 'speed', tables.Atom.from_dtype(np.dtype('float')), shape=(0,), filters=filters)
+
+            f_img.append(X_train)
+            f_steer.append(y_train)
+            f_throttle.append(throttle)
+            f_brake.append(brake)
+            f_speed.append(speed)
+
+            f.close()
+
+    except Exception as e:
+        print('Unable to save data to', h5_file, ':', e)
+        raise
+else:
+    print('File existing, NO UPDATE to:', h5_file)
 
 
-def img_preprocess(image, steer_ang, flip = True, warp = True, shadow = True):
-    """
-    Apply processing to image: The input of the image is BGR format
-    """    
-    image = cv2.cvtColor(image,cv2.COLOR_BGR2RGB)
-
-    # image size
-    im_y, im_x, ch = image.shape
-    
-    # translate image and compensate for steering angle
-    trans_range = 0
-    # image, steer_ang = trans_image(image, steer_ang, trans_range) # , trans_y=True
-    
-    # crop image region of interest
-    #image = crop_image(image, 20, 140, 0+trans_range, im_x-trans_range)
-    image = crop_image(image, 56, 140, 0+trans_range, im_x-trans_range)
-       
-    # Coin flip to see to flip image and create a new sample of -angle
-    if flip and steer_ang != 0 and np.random.randint(2) == 1:
-        image, steer_ang = flip_image(image, steer_ang)
-
-    # augment brightness
-    #image = augment_brightness(image)
-    #image = change_brightness(image)
-
-    if shadow:
-        image = add_random_shadow(image)
-
-    if warp and steer_ang == 0:
-        image, steer_ang = warp_img(image, steer_ang)
-
-    # perturb steering with a bias
-    #steer_ang += np.random.normal(loc=0,scale=0.2)
-        
-    return image, steer_ang

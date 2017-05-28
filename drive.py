@@ -3,7 +3,6 @@ import base64
 from datetime import datetime
 import os
 import shutil
-import cv2
 
 import numpy as np
 import socketio
@@ -17,54 +16,43 @@ from keras.models import load_model
 import h5py
 from keras import __version__ as keras_version
 
+import cv2
+
 sio = socketio.Server()
 app = Flask(__name__)
 model = None
 prev_image_array = None
 
-def preprocessImage(image):
-    # Proportionally get lower half portion of the image
-    nrow, ncol, nchannel = image.shape
-    
-    start_row = int(nrow * 0.35)
-    end_row = int(nrow * 0.875)   
-    
-    ## This removes most of the sky and small amount below including the hood
-    image_no_sky = image[start_row:end_row, :]
+def normalize_grayscale(image_data):
+    """
+    Normalize the image data with Min-Max scaling to a range of [0.1, 0.9]
+    :param image_data: The image data to be normalized
+    :return: Normalized image data
+    """
+    img_max = np.max(image_data)
+    img_min = np.min(image_data)
+    a = -0.5
+    b = 0.5
 
-    # This resizes to 66 x 220 for NVIDIA's model
-    new_image = cv2.resize(image_no_sky, (220,66), interpolation=cv2.INTER_AREA)
+    img_normed = a + (b-a)*(image_data - img_min)/(img_max - img_min)
+    #print(np.max(img_normed))
+    #print(np.min(img_normed))
+    return img_normed
 
-    return new_image
+def normalize_color(image_data):
+    """
+    Normalize the image data on per channel basis.  """
+    img_normed_color = np.zeros_like(image_data, dtype=float)
+    for ch in range(image_data.shape[3]):
+        tmp = normalize_grayscale(image_data[:,:,:,ch])
+        img_normed_color[:,:,:,ch] = tmp
+    #print(np.max(img_normed_color))
+    #print(np.min(img_normed_color))
+    return img_normed_color
 
-# Images need to be resized in the training script, otherwise car does not move
-def resize_image(img):
-   return cv2.resize(img,( 200, 66))  
-
-class SimplePIController:
-    def __init__(self, Kp, Ki):
-        self.Kp = Kp
-        self.Ki = Ki
-        self.set_point = 0.
-        self.error = 0.
-        self.integral = 0.
-
-    def set_desired(self, desired):
-        self.set_point = desired
-
-    def update(self, measurement):
-        # proportional error
-        self.error = self.set_point - measurement
-
-        # integral error
-        self.integral += self.error
-
-        return self.Kp * self.error + self.Ki * self.integral
-
-
-controller = SimplePIController(0.1, 0.002)
-set_speed = 9
-controller.set_desired(set_speed)
+def normalize(x):
+    # utility function to normalize a tensor by its L2 norm
+    return x / (K.sqrt(K.mean(K.square(x))) + 1e-5)
 
 
 @sio.on('telemetry')
@@ -80,66 +68,34 @@ def telemetry(sid, data):
         imgString = data["image"]
         image = Image.open(BytesIO(base64.b64decode(imgString)))
 
-        # Annie
-        #image = image.convert('RGB')
-
         image_array = np.asarray(image)
+
+        # Crop unnecessary image top lines
+        img_crop = image_array[56:160,:,:]
+        img_resize = cv2.resize(img_crop, (200,66))
+        img_normed = normalize_color(img_resize[None,:,:,:])
+
+        transformed_image_array = img_normed
+
+        steering_angle = float(model.predict(transformed_image_array, batch_size=1))
         
-        # Annie's pre-processing
-        # image_preprocess = preprocessImage(image_array)
-        # image_array = image_preprocess[None, :, :, :]
-
-        #########################################################################
-        #perform pre-rocessing on image
-        #crop image to a new size
-        image_array = image_array[20:140,0:320]
-        image_array = cv2.resize(image_array, (200,66))
-
-        #########################################################################
-        steering_angle = float(model.predict(image_array[None, :, :, :], batch_size=1))
-
-        throttle = controller.update(float(speed))
-
-        # Adaptive throttle - Both Track
-        # if (abs(float(speed)) < 10):
-        #     throttle = 0.5
-        # else:
-        #     # When speed is below 20 then increase throttle by speed_factor
-        #     if (abs(float(speed)) < 25):
-        #         speed_factor = 1.35
-        #     else:
-        #         speed_factor = 1.0
-
-        #     if (abs(steering_angle) < 0.1): 
-        #         throttle = 0.3 * speed_factor
-        #     elif (abs(steering_angle) < 0.5):
-        #         throttle = 0.2 * speed_factor
-        #     else:
-        #         throttle = 0.15 * speed_factor
-
         # Speed limits control
-        # min_speed = 15 
-        # max_speed = 25 
-        # if float(speed) < min_speed:
-        #     throttle = 5.0
-        # elif float(speed) > max_speed:
-        #     throttle = -1.0
-        # else:
-        #     throttle = 5.0
-
+        min_speed = 15 
+        max_speed = 25 
+        if float(speed) < min_speed:
+            throttle = 5.0
+        elif float(speed) > max_speed:
+            throttle = -1.0
+        else:
+            throttle = 5.0
+        
         print(steering_angle, throttle)
         send_control(steering_angle, throttle)
-
-        # # save frame original
-        # if args.image_folder != '':
-        #     timestamp = datetime.utcnow().strftime('%Y_%m_%d_%H_%M_%S_%f')[:-3]
-        #     image_filename = os.path.join(args.image_folder, timestamp)
-        #     image.save('{}.jpg'.format(image_filename))
 
         # save frame
         if args.image_folder != '':
             # Recorded image with right color as using OpenCV (BGR).
-            img_record = cv2.cvtColor(image_array, cv2.COLOR_RGB2BGR)
+            img_record = cv2.cvtColor(img_resize, cv2.COLOR_RGB2BGR)
             #print("saving...")
 
             timestamp = datetime.utcnow().strftime('%Y_%m_%d_%H_%M_%S_%f')[:-3]
@@ -168,7 +124,7 @@ def telemetry(sid, data):
             image_filename = image_filename + '_' + str(steering_angle)
             # Save angle-annotated image?
             cv2.imwrite('{}.png'.format(image_filename), img_record)
-
+ 
     else:
         # NOTE: DON'T EDIT THIS.
         sio.emit('manual', data={}, skip_sid=True)
@@ -205,13 +161,12 @@ if __name__ == '__main__':
         help='Path to image folder. This is where the images from the run will be saved.'
     )
     parser.add_argument(
-    'draw_steer',
-    type=str,
-    nargs='?',
-    default='on',
-    help='Want to draw the steering angle on image? On/off. Default on.'
+        'draw_steer',
+        type=str,
+        nargs='?',
+        default='on',
+        help='Want to draw the steering angle on image? On/off. Default on.'
     )
-
     args = parser.parse_args()
 
     # check that model Keras version is same as local Keras version
@@ -221,8 +176,8 @@ if __name__ == '__main__':
 
     if model_version != keras_version:
         print('You are using Keras version ', keras_version,
-              ', but the model was built using ', model_version)
-
+            ', but the model was built using ', model_version)
+        
     model = load_model(args.model)
 
     if args.image_folder != '':
