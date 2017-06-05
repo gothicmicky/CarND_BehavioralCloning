@@ -15,6 +15,7 @@ from io import BytesIO
 from keras.models import load_model
 import h5py
 from keras import __version__ as keras_version
+from img_preprocess import img_preprocess
 
 import cv2
 
@@ -23,37 +24,15 @@ app = Flask(__name__)
 model = None
 prev_image_array = None
 
-def normalize_grayscale(image_data):
-    """
-    Normalize the image data with Min-Max scaling to a range of [0.1, 0.9]
-    :param image_data: The image data to be normalized
-    :return: Normalized image data
-    """
-    img_max = np.max(image_data)
-    img_min = np.min(image_data)
-    a = -0.5
-    b = 0.5
-
-    img_normed = a + (b-a)*(image_data - img_min)/(img_max - img_min)
-    #print(np.max(img_normed))
-    #print(np.min(img_normed))
-    return img_normed
-
-def normalize_color(image_data):
-    """
-    Normalize the image data on per channel basis.  """
-    img_normed_color = np.zeros_like(image_data, dtype=float)
-    for ch in range(image_data.shape[3]):
-        tmp = normalize_grayscale(image_data[:,:,:,ch])
-        img_normed_color[:,:,:,ch] = tmp
-    #print(np.max(img_normed_color))
-    #print(np.min(img_normed_color))
-    return img_normed_color
-
-def normalize(x):
-    # utility function to normalize a tensor by its L2 norm
-    return x / (K.sqrt(K.mean(K.square(x))) + 1e-5)
-
+def preprocess(image):
+    # get shape and chop off 1/3 from the top
+    shape = image.shape
+    print("shape: ",shape)
+    # note: numpy arrays are (row, col)!
+    image = image[40:shape[0]-25, 0:shape[1]]
+    image = cv2.resize(image, (200,66), interpolation=cv2.INTER_AREA)
+    # image = cv2.resize(image, (64,64), interpolation=cv2.INTER_AREA)
+    return image
 
 @sio.on('telemetry')
 def telemetry(sid, data):
@@ -68,27 +47,46 @@ def telemetry(sid, data):
         imgString = data["image"]
         image = Image.open(BytesIO(base64.b64decode(imgString)))
 
-        image_array = np.asarray(image)
-
+        image_pre = np.asarray(image)
+        image_array = preprocess(image_pre)
         # Crop unnecessary image top lines
-        img_crop = image_array[56:160,:,:]
-        img_resize = cv2.resize(img_crop, (200,66))
-        img_normed = normalize_color(img_resize[None,:,:,:])
+        # img_crop = image_array[56:160,:,:]
+        # img_resize = cv2.resize(img_crop, (200,66))
+        # img_normed = normalize_color(img_resize[None,:,:,:])
 
-        transformed_image_array = img_normed
+        transformed_image_array = image_array[None, :, :, :]
+        print(transformed_image_array.shape)
 
-        steering_angle = float(model.predict(transformed_image_array, batch_size=1))
+        # This model currently assumes that the features of the model are just the images. Feel free to change this.
+        steering_angle = 1.0*float(model.predict(transformed_image_array, batch_size=1))
         
         # Speed limits control
-        min_speed = 15 
-        max_speed = 25 
+        min_speed = 10
+        max_speed = 20 
         if float(speed) < min_speed:
-            throttle = 5.0
+            throttle = 3.0
         elif float(speed) > max_speed:
             throttle = -1.0
         else:
-            throttle = 5.0
+            throttle = 3.0
         
+        # #Adaptive throttle - Both Track
+        # if (abs(float(speed)) < 10):
+        #     throttle = 0.5
+        # else:
+        #     # When speed is below 20 then increase throttle by speed_factor
+        #     if (abs(float(speed)) < 25):
+        #         speed_factor = 1.35
+        #     else:
+        #         speed_factor = 1.0
+
+        #     if (abs(steering_angle) < 0.1): 
+        #         throttle = 0.3 * speed_factor
+        #     elif (abs(steering_angle) < 0.5):
+        #         throttle = 0.2 * speed_factor
+        #     else:
+        #         throttle = 0.15 * speed_factor
+
         print(steering_angle, throttle)
         send_control(steering_angle, throttle)
 
