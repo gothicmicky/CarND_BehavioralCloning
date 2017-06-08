@@ -34,9 +34,28 @@ The following resources can be found in this github repository:
 * README.md: project writeup
 
 To run the Using the Udacity provided simulator (earlier one, track 2 was curvy dark road in black mountains) and my drive.py file, the car can be driven autonomously around the track by executing 
-```sh
+```python
 python3 drive.py model.h5 [recording_dir]
 ```
 
 If [recording_dir] is specified, frame images will be automatically saved for later analysis.
+
+To convert images to video:
+```python
+python3 video.py <img_dir>
+```
+
+## Data Collection
+
+Data was collected using Udacity simulator in training mode. 
+
+## Data Analysis
+
+
+
+## Data Augmentation
+
+## Model 
+
+## Results
 
