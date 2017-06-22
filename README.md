@@ -18,9 +18,11 @@ This project is influenced by [nvidia paper](https://images.nvidia.com/content/t
 [image5]: ./output_images/heat_map3.jpg
 [Advanced Lane Lines]: https://github.com/jinchenglee/CarND-Advanced-Lane-Lines 
 
-
-[link1]: https://blog.keras.io/building-powerful-image-classification-models-using-very-little-data.html
-[link2]: https://chatbotslife.com/using-augmentation-to-mimic-human-driving-496b569760a9#.2d9nkoc46 "Vivek's blog on image augmentation"
+[link1]: https://jacobgil.github.io/deeplearning/vehicle-steering-angle-visualizations "Blog: Vehicle steering angle visualization"
+[link2]: https://arxiv.org/pdf/1512.04150.pdf "Paper: Learning Deep Features for Discriminative Localization"
+[link3]: https://arxiv.org/pdf/1610.02391v1.pdf "Paper: Grad-CAM. Visual Explanations from Deep Networks via Gradient-based Localization"
+[link4]: https://blog.keras.io/building-powerful-image-classification-models-using-very-little-data.html
+[link5]: https://chatbotslife.com/using-augmentation-to-mimic-human-driving-496b569760a9#.2d9nkoc46 "Vivek's blog on image augmentation"
 
 
 ---
@@ -87,7 +89,7 @@ def augment_brightness(image):
 ![alt text][image]
 
 ### Random Shadow Augmentation
-Random shadow augmentation (copied code from Vivek's blog Vivek's blog  [link2]), which helps A LOT for track 2 with various shadows on the track.
+Random shadow augmentation (copied code from Vivek's blog Vivek's blog  [link5]), which helps A LOT for track 2 with various shadows on the track.
 
 ```python
 def add_random_shadow(image):
@@ -148,8 +150,7 @@ Test: The final step was to run the simulator to see how well the car was drivin
 
 At the end of the process, the vehicle is able to drive autonomously around the track without leaving the road.
 
-## Results
-
-
 ## Further Improvements
+- The driving is extremly wobbly. I'd like to continue to investigate the root cause and optimize the preprocessing and the model
 
+- Better understand the intermediate state of the model and the features that being extracted by the nueral network. At the end of my project, I found a very good blog ([link1]) describing the idea of Activation Mapping. The blog itself was referring to papers: [link2] and [link3]. The whole idea is to using heatmap to highlight locality areas contributing most to the final decision. It was designed for classification purpose, but with slight change, it can be applied to our steering angle predictions. 
