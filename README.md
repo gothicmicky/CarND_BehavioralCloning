@@ -18,6 +18,8 @@ This project is influenced by [nvidia paper](https://images.nvidia.com/content/t
 [image4]: ./media/flipping.png
 [image5]: ./media/shadow.png
 [image6]: ./media/histogram_udacity_labels.png
+[image7]: ./media/nvidia_end2end_net.png
+[image8]: ./media/model_summary.png
 
 [Advanced Lane Lines]: https://github.com/jinchenglee/CarND-Advanced-Lane-Lines 
 
@@ -139,7 +141,15 @@ The image preprocess pipeline includes random brightness augmentation, random fl
 ## Model Architecture and Training
 The overall strategy for deriving a model architecture was to try, error, analyze failures and improve. 
 
-NVidia-model: My first step was to use a convolution neural network model similar to the NVidia end-to-end paper. I thought this model might be a good starting point because it is a proven model that works for real-world road autonomous driving. 
+NVidia-model: My first step was to use a convolution neural network model similar to the NVidia end-to-end paper. I thought this model might be a good starting point because it is a proven model that works for real-world road autonomous driving. The model consists of a convolution neural network with 5 layers of convolution of 3x3 or 5x5 filter sizes and depths between 24 and 64 (model.py lines 676-707). 
+
+![alt text][image7]
+
+
+The input is also normalized in the lambda layer, prior to the convoluation layer:
+```python
+    model.add(Lambda(lambda x: (x / 255.0) - 0.5, input_shape=(66,200,3)))
+```
 
 Image cropping: The nvidia network expects image input size of 200x66, and because I believe the upper 1/3-1/4 part of the input image has no meaning to determine my steering angle, I did a cropping of the upper part then scale to the size of 200x66 in model.py. 
 ``` python
@@ -149,13 +159,17 @@ Image cropping: The nvidia network expects image input size of 200x66, and becau
 ```
 Train/Validate split: In order to gauge how well the model was working, I split my image and steering angle data into a training and validation set. I found that my first model had a low mean squared error on the training set but a high mean squared error on the validation set. This implied that the model was overfitting. 
 
-Overfitting: To combat the overfitting, I modified the model by inserting dropouts to layers so that each layer can learn "redundant" features that even some are dropped in dropout layer, it can still predict the right angle. It did work. 
+Overfitting: To combat the overfitting, I modified the model by inserting dropouts to layers so that each layer can learn "redundant" features that even some are dropped in dropout layer, it can still predict the right angle. It did work. Below is the summary of the final model.
+
+![alt text][image8]
+
 
 Test: The final step was to run the simulator to see how well the car was driving around track one. There were a few spots where the vehicle fell off the track (say, the first left turn before black bridge, the left turn after black bridge, and then the right turn after that)... to improve the driving behavior in these cases, I purposely recorded recovery behavior (from curb side to center of the road) along the tracks. Then the car can finish track 1 completely. 
 
-At the end of the process, the vehicle is able to drive autonomously around the track without leaving the road.
+## Results
+At the end of the process, the vehicle is able to drive autonomously around track1 without leaving the road.
 
 ## Further Improvements
-- The driving is extremly wobbly. I'd like to continue to investigate the root cause and optimize the preprocessing and the model
+- The driving is extremly wobbly. I'd like to continue to investigate the root cause and optimize the preprocessing and the model. For example, I could try fine tuning the architecture with widened convoluation layer  
 
 - Better understand the intermediate state of the model and the features that being extracted by the nueral network. At the end of my project, I found a very good blog ([link1]) describing the idea of Activation Mapping. The blog itself was referring to papers: [link2] and [link3]. The whole idea is to using heatmap to highlight locality areas contributing most to the final decision. It was designed for classification purpose, but with slight change, it can be applied to our steering angle predictions. 
