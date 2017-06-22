@@ -12,11 +12,13 @@ This project is influenced by [nvidia paper](https://images.nvidia.com/content/t
 
 [//]: # (Image References)
 [image0]: ./media/run1.gif
-[image1]: ./media/histogram_udacity_labels.png
-[image2]: ./media/hog_RGB2YCrCb.png
-[image3]: ./media/search_area_and_boxes3.jpg
-[image4]: ./media/labled_boxes3.jpg
-[image5]: ./media/heat_map3.jpg
+[image1]: ./media/example_images.png
+[image2]: ./media/histogram_udacity_labels.png
+[image3]: ./media/Brightness_augmentation.png
+[image4]: ./media/flipping.png
+[image5]: ./media/histogram_udacity_labels.png
+[image6]: ./media/histogram_udacity_labels.png
+
 [Advanced Lane Lines]: https://github.com/jinchenglee/CarND-Advanced-Lane-Lines 
 
 [link1]: https://jacobgil.github.io/deeplearning/vehicle-steering-angle-visualizations "Blog: Vehicle steering angle visualization"
