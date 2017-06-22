@@ -9,6 +9,19 @@ Training data is collected from recordings human driving in the simulator, then 
 
 This project is influenced by [nvidia paper](https://images.nvidia.com/content/tegra/automotive/images/2016/solutions/pdf/end-to-end-dl-using-px.pdf), [comma.ai paper](https://arxiv.org/pdf/1608.01230v1.pdf), [vivek's blog](https://chatbotslife.com/using-augmentation-to-mimic-human-driving-496b569760a9#.5dpi87xzi) and [various posts](https://medium.com/self-driving-cars/6-different-end-to-end-neural-networks-f307fa2904a5#.yk2a9g6ui) from other Udacity students which I consulted while working on my solution. The [Keras Deep Learning library](https://keras.io/) was used with [Tensorflow](https://www.tensorflow.org/) backend to perform deep learning operations. The training was performed on [Amazon EC2 GPU instances](https://aws.amazon.com/ec2/Elastic-GPUs/).
 
+[//]: # (Image References)
+[image0]: ./output_images/project_output.gif
+[image1]: ./output_images/histogram_udacity_labels.png
+[image2]: ./output_images/hog_RGB2YCrCb.png
+[image3]: ./output_images/search_area_and_boxes3.jpg
+[image4]: ./output_images/labled_boxes3.jpg
+[image5]: ./output_images/heat_map3.jpg
+[Advanced Lane Lines]: https://github.com/jinchenglee/CarND-Advanced-Lane-Lines 
+
+
+[link1]: "https://blog.keras.io/building-powerful-image-classification-models-using-very-little-data.html"
+
+
 ---
 ## Objectives
 The goals / steps of this project are the following:
@@ -24,16 +37,14 @@ This lab requires:
 
 The lab enviroment can be created with CarND Term1 Starter Kit. Click [here](https://github.com/udacity/CarND-Term1-Starter-Kit/blob/master/README.md) for the details.
 
-## Script excecution instructions
-The following resources can be found in this github repository:
+## File Structure
 * model.py: used to create and train the model
 * model.h5: containing a trained convolution neural network 
-* preprocess.py: used to preprocess recorded raw images and save the images as HDF5 data files. The preprocessing includes image brightness changes,  normalization, and optioal data augmentation for random shadow generation.
 * drive.py: used for driving the car in autonomous mode
 * analyze_data.py: used to analyze the distribution of recorded training data, say histogram of steering angle against speed or throttle.
 * README.md: project writeup
 
-To run the Using the Udacity provided simulator (earlier one, track 2 was curvy dark road in black mountains) and my drive.py file, the car can be driven autonomously around the track by executing 
+To run the Using the Udacity provided simulator and my drive.py file, the car can be driven autonomously around the track by executing 
 ```python
 python3 drive.py model.h5 [recording_dir]
 ```
@@ -47,15 +58,21 @@ python3 video.py <img_dir>
 
 ## Data Collection
 
-Data was collected using Udacity simulator in training mode. 
+Data was collected using Udacity simulator in training mode. I used the example driving data provided by Udacity and supplemented with my own "recovery" driving data where I let the car drift to the edge of the lane and recorded steering the car back to the center. 
 
 ## Data Analysis
 
+I noticed that the data provided by Udacity is out of blance. Below is the histogram of the steering angle data, the majority of the steering angles are 0.0 or very small values. The dominance of the small values would impact the training results. To blance the data, I have tried a few data augmentation techniques from this blog[link1].
 
+![alt text][image1]
 
 ## Data Augmentation
+
 
 ## Model 
 
 ## Results
+
+
+## Further Improvements
 
