@@ -1,4 +1,5 @@
 # Behavioural Cloning Project
+![alt text][image0]
 
 ---
 ## Project Overview
@@ -10,12 +11,12 @@ Training data is collected from recordings human driving in the simulator, then 
 This project is influenced by [nvidia paper](https://images.nvidia.com/content/tegra/automotive/images/2016/solutions/pdf/end-to-end-dl-using-px.pdf), [comma.ai paper](https://arxiv.org/pdf/1608.01230v1.pdf), [vivek's blog](https://chatbotslife.com/using-augmentation-to-mimic-human-driving-496b569760a9#.5dpi87xzi) and [various posts](https://medium.com/self-driving-cars/6-different-end-to-end-neural-networks-f307fa2904a5#.yk2a9g6ui) from other Udacity students which I consulted while working on my solution. The [Keras Deep Learning library](https://keras.io/) was used with [Tensorflow](https://www.tensorflow.org/) backend to perform deep learning operations. The training was performed on [Amazon EC2 GPU instances](https://aws.amazon.com/ec2/Elastic-GPUs/).
 
 [//]: # (Image References)
-[image0]: ./output_images/project_output.gif
-[image1]: ./output_images/histogram_udacity_labels.png
-[image2]: ./output_images/hog_RGB2YCrCb.png
-[image3]: ./output_images/search_area_and_boxes3.jpg
-[image4]: ./output_images/labled_boxes3.jpg
-[image5]: ./output_images/heat_map3.jpg
+[image0]: ./media/run1.gif
+[image1]: ./media/histogram_udacity_labels.png
+[image2]: ./media/hog_RGB2YCrCb.png
+[image3]: ./media/search_area_and_boxes3.jpg
+[image4]: ./media/labled_boxes3.jpg
+[image5]: ./media/heat_map3.jpg
 [Advanced Lane Lines]: https://github.com/jinchenglee/CarND-Advanced-Lane-Lines 
 
 [link1]: https://jacobgil.github.io/deeplearning/vehicle-steering-angle-visualizations "Blog: Vehicle steering angle visualization"
