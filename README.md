@@ -12,11 +12,13 @@ This project is influenced by [nvidia paper](https://images.nvidia.com/content/t
 
 [//]: # (Image References)
 [image0]: ./media/run1.gif
-[image1]: ./media/histogram_udacity_labels.png
-[image2]: ./media/hog_RGB2YCrCb.png
-[image3]: ./media/search_area_and_boxes3.jpg
-[image4]: ./media/labled_boxes3.jpg
-[image5]: ./media/heat_map3.jpg
+[image1]: ./media/example_images.png
+[image2]: ./media/histogram_udacity_labels.png
+[image3]: ./media/Brightness_augmentation.png
+[image4]: ./media/flipping.png
+[image5]: ./media/shadow.png
+[image6]: ./media/histogram_udacity_labels.png
+
 [Advanced Lane Lines]: https://github.com/jinchenglee/CarND-Advanced-Lane-Lines 
 
 [link1]: https://jacobgil.github.io/deeplearning/vehicle-steering-angle-visualizations "Blog: Vehicle steering angle visualization"
@@ -45,7 +47,7 @@ The lab enviroment can be created with CarND Term1 Starter Kit. Click [here](htt
 * model.py: used to create and train the model
 * model.h5: containing a trained convolution neural network 
 * drive.py: used for driving the car in autonomous mode
-* analyze_data.py: used to analyze the distribution of recorded training data, say histogram of steering angle against speed or throttle.
+* video.py: convert the recorded images into video
 * README.md: project writeup
 
 To run the Using the Udacity provided simulator and my drive.py file, the car can be driven autonomously around the track by executing 
@@ -62,19 +64,19 @@ python3 video.py <img_dir>
 
 ## Data Collection and Analysis
 
-I started with Udacity's data (known good center lane driving data). Here is an example image form left, center and right camera:
+I started with Udacity's data (center lane driving data). Here is an example image form left, center and right camera:
 
 ![alt text][image1]
 
-Training by using Udacity data alone provided ok result but the car eventaully drifted outside of the lane. This is mainly because the model hasn't learned how to recover when the car is drifted to the side. Hence I added my own recovery data which was collected using Udacity simulator in training mode. For the recoever driving, I let the car drift to the edge of the lane and recorded steering the car back to the center. 
+Training by using Udacity data alone provided ok result but the car eventaully drifted outside of the lane. This is mainly because the model hasn't learned how to recover when the car is drifted to the side. Hence I added my own recovery data which was collected using Udacity simulator in training mode. For the recoevery driving, I let the car drift to the right and left edge of the lane and recorded steering the car back to the center. 
 
-I also noticed that the data provided by Udacity is out of blance. Below is the histogram of the steering angle data, the majority of the steering angles are 0.0 or very small values. The dominance of the small values would impact the training results. 
-![alt text][image1]
+I also noticed that the data provided by Udacity is out of blance. Below is the histogram of the steering angle data, the majority of the steering angles are either 0.0 or very small values. The dominance of the small values would impact the training results. 
+![alt text][image2]
 
-Adding more receovery data is also helping balancing the steeing angle distribution. 
+Adding receovery data is also helping balancing the steeing angle distribution. 
 
 ## Data Augmentation
-After collecting data, I have ~20K images to work with. I then preprocessed the images. For example, modifying image brightness histogram and adding random shadows. Here are example images: 
+After collecting data, I have ~20K images to work with. I then preprocessed the images. For example, modifying image brightness histogram and adding random shadows to simulate the condition that is not provided in track 1.
 
 ### Brightness Augmentation
 I converted camera image's brightness so the car can learn to operate various lighting conditions. To do brightness augmentation, I converted RGB image to HSV, scaled V (brightness) channel by a random number between .25 and 1.25, and converted the image back to RGB.
@@ -87,7 +89,7 @@ def augment_brightness(image):
     image1 = cv2.cvtColor(image1,cv2.COLOR_HSV2RGB)
     return image1
 ```
-![alt text][image]
+![alt text][image3]
 
 ### Random Shadow Augmentation
 Random shadow augmentation (copied code from Vivek's blog Vivek's blog  [link5]), which helps A LOT for track 2 with various shadows on the track.
@@ -116,7 +118,7 @@ def add_random_shadow(image):
     image = cv2.cvtColor(image_hls,cv2.COLOR_HLS2RGB)
     return image 
 ```
-![alt text][image]
+![alt text][image5]
 
 ### Random Flipping
 This could simulate the car driving in reverse direction. I only flip the image when the steer angle is greater than 0.1. 
@@ -128,9 +130,11 @@ This could simulate the car driving in reverse direction. I only flip the image 
             steer_ang = -1.0*steer_ang
 ```
 
+![alt text][image4]
+
 ### The Pipline
 
-The image preprocess pipeline includes warping, random flipping and random shadow.
+The image preprocess pipeline includes random brightness augmentation, random flipping and random shadow.
 
 ## Model Architecture and Training
 The overall strategy for deriving a model architecture was to try, error, analyze failures and improve. 
