@@ -15,7 +15,6 @@ from io import BytesIO
 from keras.models import load_model
 import h5py
 from keras import __version__ as keras_version
-from img_preprocess import img_preprocess
 
 import cv2
 
@@ -24,14 +23,25 @@ app = Flask(__name__)
 model = None
 prev_image_array = None
 
+def crop_image(image, y1, y2, x1, x2):
+    """
+    crop image into respective size
+    give: the crop extent
+    """
+    return image[y1:y2, x1:x2]
+
 def preprocess(image):
-    # get shape and chop off 1/3 from the top
     shape = image.shape
-    print("shape: ",shape)
     # note: numpy arrays are (row, col)!
+    # image = crop_image(image, 20, 140, 0, im_x)
     image = image[40:shape[0]-25, 0:shape[1]]
+    # image = image[20:shape[0]-20, 0:shape[1]]
+
     image = cv2.resize(image, (200,66), interpolation=cv2.INTER_AREA)
     # image = cv2.resize(image, (64,64), interpolation=cv2.INTER_AREA)
+
+    # image = (image / 255.0) - 0.5
+
     return image
 
 @sio.on('telemetry')
@@ -49,6 +59,7 @@ def telemetry(sid, data):
 
         image_pre = np.asarray(image)
         image_array = preprocess(image_pre)
+        
         # Crop unnecessary image top lines
         # img_crop = image_array[56:160,:,:]
         # img_resize = cv2.resize(img_crop, (200,66))
@@ -60,15 +71,17 @@ def telemetry(sid, data):
         # This model currently assumes that the features of the model are just the images. Feel free to change this.
         steering_angle = 1.0*float(model.predict(transformed_image_array, batch_size=1))
         
+        # throttle = controller.update(float(speed))
+
         # Speed limits control
         min_speed = 10
-        max_speed = 20 
+        max_speed = 18 
         if float(speed) < min_speed:
-            throttle = 3.0
+            throttle = 0.5
         elif float(speed) > max_speed:
-            throttle = -1.0
+            throttle = -0.5
         else:
-            throttle = 3.0
+            throttle = 0.5
         
         # #Adaptive throttle - Both Track
         # if (abs(float(speed)) < 10):
@@ -93,7 +106,7 @@ def telemetry(sid, data):
         # save frame
         if args.image_folder != '':
             # Recorded image with right color as using OpenCV (BGR).
-            img_record = cv2.cvtColor(img_resize, cv2.COLOR_RGB2BGR)
+            img_record = cv2.cvtColor(image_array, cv2.COLOR_RGB2BGR)
             #print("saving...")
 
             timestamp = datetime.utcnow().strftime('%Y_%m_%d_%H_%M_%S_%f')[:-3]
